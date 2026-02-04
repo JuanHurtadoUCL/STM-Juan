@@ -1,0 +1,353 @@
+% Try Import UCL Files
+% This script reads the .csv files and transform it to a .mat structure
+% with the G and the Z of all of the measured traces
+
+selpath = uigetdir
+<<<<<<< HEAD:DC_Open_Files_UCL_V2.m
+save_filename = ['LowT_STM_RT_Au.mat'];  % This is the name of the saved file
+cd(selpath)
+Rg=1e8;                             % Gain resistance
+Vb=0.09;                            % Vbias
+factor_piezo=2.7e-8;                % Volts to m  
+=======
+save_filename = 'ope3-1anchor-800mvbis.mat';  % This is the name of the saved file
+cd(selpath)
+Rg=1e7;                             % Gain resistance
+Vb=0.8;                             % Vbias
+>>>>>>> bc50609ac1e6dbafcd076559806063d9252e9d79:Open_Files_UCL_V2.m
+%num_trace=[9053 21158];            % Number of the traces. First one and Last One
+curva=[];
+ind=0;
+G_tot=[];
+Z_tot=[];
+RS = [];
+remove=0;
+remove_file=0;
+remove_top=0;
+remove_botom=0;
+div_cut=100;
+
+
+folder_trace = ({dir(fullfile(selpath,'traces*.csv')).name}) ;
+folder_piezo = ({dir(fullfile(selpath,'piezo*.csv')).name});
+%%
+for i= 1:length(folder_trace)
+    
+    file_piezo= folder_piezo{i};
+    file_trace= folder_trace{i};
+    
+    if isempty(file_piezo)
+        continue
+    end
+    % k1
+    piezo_bit = csvread(file_piezo);
+    traces_bit = csvread(file_trace);
+    %piezo = piezo_bit*(10/8388608)-10;                 % Bit to V conversion
+    %piezo_volt = piezo_bit*(10/8388608)-10; 
+    %piezo = (piezo_volt./50).*3.5e-8;
+    piezo = piezo_bit.*(10/32768)-10;                      % ((35e-6)/100)*(10/(32768*50))
+    traces = traces_bit.*(10/8388608)-10;                % Bit to V conversion
+    traces_rms = traces*sqrt(2);
+    if size(traces)<310
+        continue
+    end
+    [G_trace, Z_trace, R_serie] = fromvtog(piezo,traces,Rg,Vb);  % V to G conversion
+    Z_trace = Z_trace*factor_piezo;
+    RS  = [RS; R_serie];
+    cut_tr=round(length(G_trace)/div_cut);
+    log_g=log10(abs(G_trace));
+    top_g=mean(log_g(1:100));
+    botom_g=mean(log_g(end-100:end));
+    if top_g<0
+        remove=remove+1;
+        remove_top=remove_top+1;
+        continue
+    end
+     if botom_g>-5
+        remove=remove+1;
+        remove_botom=remove_botom+1;
+        continue
+     end
+
+
+     if size(G_trace)==size(Z_trace)
+         ind=ind+1;
+         curva(ind).g=G_trace;
+         curva(ind).z=Z_trace*1e9;   % Change to nm  
+         G_tot=[G_tot;G_trace];
+         Z_tot=[Z_tot; Z_trace*1e9];
+     end
+end
+curva(1).Info.Vbias = {[num2str(Vb) ' mV']};
+curva(1).Info.Rserie =  {[num2str(round(mean(RS)/1e6,1)) ' MOhm']};
+curva(1).Info.Rgain =  {[num2str(Rg/1e6) ' MOhm']};
+disp(['Removed traces: ' num2str(remove)]);
+disp(['Removed traces File: ' num2str(remove_file)]);
+disp(['Removed traces Top: ' num2str(remove_top)]);
+disp(['Removed traces Botom: ' num2str(remove_botom)]);
+disp(['Collected traces: ' num2str(length(curva))]);
+
+%%
+<<<<<<< HEAD:DC_Open_Files_UCL_V2.m
+cd 'C:\Users\hurtadogalle\OneDrive - UCL\Documents\STM_Analysis'
+=======
+cd 'C:\Users\admin-naps\Matlab Analysis files\STM_Analysis'
+>>>>>>> bc50609ac1e6dbafcd076559806063d9252e9d79:Open_Files_UCL_V2.m
+curva(1).numtraces=ind;
+curva(1).info='Traces are saved in curva(i).g in G/G0 linear scale and in curva(i).z in nm';
+fig=figure;
+ax1=axes(fig);
+Glog_tot=log10(abs(G_tot));
+
+x_lim=[-0.27 1.46];
+y_lim=[-6.8 2];
+eje0=[x_lim(1),x_lim(2),y_lim(1),y_lim(2)];
+
+sig=0.5;
+nhi20=30;
+%res=30;
+namess{1}='2D';
+axesLabel={'X','Y'};
+Hist2D(ax1,Z_tot,Glog_tot,eje0,sig,nhi20,namess,axesLabel);
+save([selpath '\' save_filename],'curva', '-v7.3');
+save('C:\Users\admin-naps\JP_Files\OneDrive - UCL\Doctorat2022\Molecules Shared', 'curva', '-v7.3')
+disp('Done')
+
+
+%%
+
+function [G,Z,rserie] = fromvtog(piezo_v,data_v,resistor,bias)
+G0=7.75e-5;
+piezo_v=-piezo_v;
+len_trace=length(data_v);
+%data_zer=data_v-mean(data_v(end-round(len_trace/20):end));
+%sat=mean(data_zer(1:round(len_trace/20)));
+
+data_zer=data_v-mean(data_v(end-100:end));
+sat=mean(data_zer(200:300));
+
+rserie = (bias/sat)*resistor;
+
+conversion = data_zer./(1-data_zer/sat);
+
+Gj=(1/(resistor*bias)).*conversion;
+G = Gj./G0;
+lG = smooth(log10(G));
+zer_cor = mean(piezo_v(lG>-1 & lG<-0.3));
+%if length(zer_cor)<3
+%    zer_cor_move = 0;
+%else
+%    zer_cor_move = mean(zer_cor(end-3:end));
+%end
+%zer_cor = zer_cor_tot(end);
+Z = (piezo_v-zer_cor); %*1e3;
+%disp('f'
+end
+function [data,l] = Hist2D(ha,dataxx,datayy,eje0,radio,altura,namess,axesLabel,inform,axpos,num)
+
+global grosorcurva labelsize grosorejes fontejes letrasize labelsizein 
+    
+axes(ha)
+eje.x = eje0(1:2);
+eje.y = eje0(3:4);
+
+nxb = linspace(eje.x(1),eje.x(2),160);
+nyb = linspace(eje.y(1),eje.y(2),160);
+% COMENTADO POR JUAN
+% res2 = round((max(eje.y)-min(eje.y))/bins);
+% res1 = res2;
+% if res1>300; res1 = 300; res2 = 300; end
+% bins = (max(eje.x)-min(eje.x))/res1;
+%COMENTADO POR JUAN
+
+% histograma de Andrés
+% res1=256;
+% res2=256;
+%C5ambio Juan
+ % res1=530;
+ % res2=566;
+  
+    res1=550;
+  res2=550;
+%res1=1080;
+%res2=1080;
+bins = (max(eje.x)-min(eje.x))/res1;
+%bins=100;
+%Cambio Juan
+fun = 'gauss';
+con = 'conv2';
+Rx = radio;
+Ry = Rx;
+Rs = 2; %da igual para la gaussiana
+   
+ind = find(dataxx > eje.x(1) & dataxx < eje.x(2));
+   
+hh.x = dataxx(ind);
+hh.y = datayy(ind);
+ind = find(hh.y > eje.y(1) & hh.y < eje.y(2));
+hh.x = hh.x(ind);
+hh.y = hh.y(ind);
+
+limites = [eje.x eje.y];
+[H,vX,vY,F] = hist2conv(hh.x,hh.y,limites,res1,res2,fun,con,Rx,Ry,Rs);
+normf = sum(H(:))*bins^2;
+normf = 1;
+box on 
+grid on
+%colm = load('mycolormap.mat');  
+%colm = load('colormap_new.mat'); 
+%colormap(colm.colm.mycmap);
+colormap(jet)
+%colormapeditor
+hhiloA = pcolor(vX,vY,H'/normf);
+set(hhiloA,'linestyle','none');
+
+caxis ([0 altura/normf])
+
+inform.Hisdata.vX = vX;
+inform.Hisdata.vY = vY;
+inform.Hisdata.H = H;
+inform.initialData.x = dataxx;
+inform.initialData.y = datayy;
+inform.binsize = bins;
+inform.normFactor = normf;
+
+if ~isempty(axesLabel)
+    xlabel(axesLabel{1});%,'FontSize',12); 
+    ylabel(axesLabel{2});%,'FontSize',12);
+end
+p = [];
+for n = 1:length(namess)
+    modifnamef = strrep(namess{n}, '_', '\_');
+   p=[p modifnamef];
+end
+
+data = inform;
+l.pname = p;
+
+%set(ha,'Fontsize',13);
+%set(ha,'linewidth',2,'TickLength',[0.015 0.015]);
+
+    
+end
+function [H,vX,vY,F] = hist2conv(X,Y,limites,res1,res2,fun,con,Rx,Ry,Rs)
+
+% H = hist2conv(X,Y,res1,res2,fun,R1,R2,R3) devuelve la matriz resultante
+% de convolucionar los datos X,Y con una matriz rellena según la función
+% fun. El resultado es una matriz res1xres1.
+%  Rx = radio en X
+%  Ry = radio en Y
+%  Rs = parametro de smearing
+%  fun = {'gauss','bell'}
+
+% Si no introducimos smearing lo toma como 1
+if nargin == 8
+    Rs = 1;
+end
+
+
+% Calculamos la matriz de Kronecker de nuestros datos XY
+%K = hist3([X,Y],[res1,res1]) ;
+%vX = linspace(min(X),max(X),res1+1);
+%vY = linspace(min(Y),max(Y),res1+1);
+
+%modificado por Nicolás: los límites son comunes a varios histogramas, así
+%el fondo queda uniforme
+vX = linspace(limites(1),limites(2),res1+1);
+vY = linspace(limites(3),limites(4),res1+1);
+[nxout,xout]=hist(X,length(vX));
+Unim = ones(1,length(vX));
+norm = Unim'*nxout;
+K = hist3([X,Y],{vX,vY}) ;
+%K = K./norm';
+
+
+% Calculamos la matriz F con la que vamos a convolucionar
+switch fun
+    case 'gauss'
+        Fx = gaussmf(1:res2,[Rx,res2/2+1]);
+        Fy = gaussmf(1:res2,[Ry,res2/2+1]);
+        F = Fy'*Fx;
+    case 'bell'
+        Fx = gbellmf(1:res2,[Rx,Rs,res2/2+1]);
+        Fy = gbellmf(1:res2,[Ry,Rs,res2/2+1]);
+        F = Fy'*Fx;
+    case 'user'
+        Fx = gauss2mf(1:res2,[Rx,res2/2+1,Ry,res2/2+1]);
+        Fy = gauss2mf(1:res2,[Rx,res2/2+1,Ry,res2/2+1]);
+        F = Fy'*Fx;
+    otherwise
+        disp('function not recognised: USING GAUSS');
+        Fx = gaussmf(1:res2,[Rx,res2/2+1]);
+        Fy = gaussmf(1:res2,[Ry,res2/2+1]);
+        F = Fy'*Fx;        
+end
+
+% Calculamos la matriz de convolución H
+%H = conv2(K,F,'shape');
+ switch con
+     case 'conv2'
+%          H = conv2(K,F,'shape'); %%%SHAPE must be 'full', 'same', or 'valid'.
+         H = conv2(K,F,'same');
+     case 'conv2fft'
+         H = conv2fft(K,F);
+     otherwise
+         disp('conv2 kind not recognized: USING CONV2');
+         H = conv2(K,F,'shape');
+ end
+H(res1+1,:)=0;
+H(:,res1+1)=0;        
+
+
+
+
+end
+function [h,x,y] = hist2pdf2D(dat,res,sig)
+% dat : is a 2 column matrix ([X Y])
+% res : number of points on each side (histogram boxes = res^2)
+% sig : [sigx sigy] sigma of gaussian in x and y (in units of the x-axis and y-axis)
+% The integral of the pdf is the number of elements in dat
+
+
+%dat = .5*rand(100,2);
+%dat = [dat; .9 .9; .9 .9; .1 .9; .1 .9];
+%res = 50;
+%sig = [.01 .01];
+
+%figure(100)
+%hist3(dat,[res res])
+
+[K,C] = hist3(dat,[res res]);
+
+dx = mean(C{1}(2:end)-C{1}(1:end-1));
+dy = mean(C{2}(2:end)-C{2}(1:end-1));
+
+if mod(res,2)==0 %is even, ng debe ser siempre impar
+    ng = res+1;
+else
+    ng = res;
+end
+
+xx = dx*((1:ng)-ceil(ng/2));
+yy = dy*((1:ng)-ceil(ng/2));
+%definimos la gaussiana en el mismo intervalo del histograma
+Fx = gaussmf(xx,[sig(1),0]);
+Fy = gaussmf(yy,[sig(2),0]);
+F = Fy'*Fx;
+F = F/sig(1)/sig(2)/2/pi;
+
+%H = conv2(K,F,'shape');
+H = conv2(K,F,'same');
+if ~nargout 
+    %surf(C{1},C{2},H')
+    contourf(C{1},C{2},H',50,'linestyle','none')
+    xlabel('Z (nm)')
+    ylabel('Conductance log(G/G_0)')
+    title('G0-11C')
+else
+    h = H';
+    x = C{1};
+    y = C{2};
+end
+disp(' ')
+end

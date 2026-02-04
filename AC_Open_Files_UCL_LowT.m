@@ -1,0 +1,870 @@
+% Try Import UCL Files
+% This script reads the .csv files and transform it to a .mat structure
+% with the G and the Z of all of the measured traces
+
+function main
+
+current = fileparts(mfilename('fullpath'));
+
+
+selpath = uigetdir();
+%selpath = 'C:\Users\hurtadogalle\OneDrive - UCL\Post Doc UCL 2023-2024\Measurements 2024\Seebeck Coefficient OPE3 29042024\10mV ACDC_2123Hz\traces2024-05-02185_Cal_10mV\traces2024-05-02185';
+str1 = strfind(selpath,'\');
+if selpath(str1(end)+1:str1(end)+3)=='Mod'
+    modulation = 1;
+    save_filename = ['Mod_25V_Molecule_' selpath(str1(end)+5:end) '.mat'];  % This is the name of the saved file
+else
+    save_filename = ['0V_Molecule2_' selpath(str1(end)+5:end) '.mat'];  % This is the name of the saved file
+    modulation = 0;
+end
+cd(selpath)
+
+Vb=0.030;                             % Vbias (As appears in the lockin box)
+G0=7.748e-5;
+piezo_factor = 35*0.245;      % V to nm
+
+%num_trace=[9053 21158];            % Number of the traces. First one and Last One
+curva=[];
+ind=0;
+G_tot=[];
+Z_tot=[];
+Vth_tot =[];
+RS = [];
+remove=0;
+remove_file=0;
+remove_top=0;
+remove_botom=0;
+remove_modulation=0;
+div_cut=100;
+sgolay_filter = 10;
+Rs_calculated = 1.004e6;
+Gain_Resistor=1e8;                             % Gain resistance
+cse=2e-10;
+freq=3.123e3;
+Pt_resistor_tip = 1090; % PT resistance Ohm
+Pt_resistor_substrate = 1090; % PT resistance Ohm
+Temp_tip = temperature_resistor(Pt_resistor_tip);
+Temp_substrate = temperature_resistor(Pt_resistor_substrate);
+number_traces = length(({dir(fullfile(selpath,'AcX*.csv')).name}));
+off_bool = 0; % 0 if automatic, 1 if manual
+cal_trace =1;
+offsets = [0, 0;  % Saturation DC, Saturation AC
+           0, 0];  % Low DC       , Low AC
+
+%save_filename = [date 'order' num2str(sgolay_filter) 'OPE3_Lockin_15V_25mV.mat'];
+
+fig_choose = figure('units','normalized','position',[0.3031 0.2417 0.3563 0.5463]);
+pan1 =uipanel(fig_choose,'units','normalized','position',[0.0476 0.5232 0.9036 0.4638]);
+if modulation ==1
+    txt_question = uicontrol('Parent',pan1,'style','text','units','normalized','position',[0.0710 0.8059 0.8500 0.1601],...
+    'String','Piezo-Stop Measurement','FontSize',15);
+    disp('Piezo Stop M')
+
+else
+txt_question = uicontrol('Parent',pan1,'style','text','units','normalized','position',[0.0710 0.8059 0.8500 0.1601],...
+    'String','Current-Distance Measurement','FontSize',15);
+end
+bg = uibuttongroup('Parent',pan1,'units','Normalized','Position',[0.0109 0.0164 0.4850 0.5394]);
+rb1 = uicontrol('Parent',bg,'style','radiobutton','units','normalized','Position',[0.1 0.6 0.9 0.2],'String','Calibration','FontSize',10);
+rb2 = uicontrol('Parent',bg,'style','radiobutton','units','normalized','Position',[0.1 0.2 0.9 0.2],'String','Measurement','FontSize',10);
+
+tx_trace = uicontrol('Parent',pan1,'style','text','units','normalized','position',[0.0977 0.6628 0.3000 0.1175],'string',['N.Traces = ' num2str(number_traces)]);
+ed_ntrace = uicontrol('Parent',pan1,'style','edit','units','normalized','position',[0.0993 0.5757 0.3000 0.1175],...
+    'String',num2str(cal_trace), 'Value', cal_trace,'Callback',@func_ntrace);
+    function func_ntrace(~,~)
+        cal_trace = str2num(ed_ntrace.String);
+        ed_ntrace.Value = cal_trace;
+    end
+
+pan_off = uipanel(fig_choose,'units','normalized','position',[0.5079 0.5355 0.4328 0.2477]);
+bgoff = uibuttongroup('Parent',pan_off,'units','Normalized','Position',[0.0106 0.0164 0.6655 0.2091]);
+rb_off1 = uicontrol('Parent',bgoff,'style','radiobutton','units','normalized','Position',[0.05 0.05 0.4 0.9],'String','Automatic','FontSize',8);
+rb_off2 = uicontrol('Parent',bgoff,'style','radiobutton','units','normalized','Position',[0.55 0.05 0.4 0.9],'String','Manual','FontSize',8);
+
+ed_low_dc = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.2717 0.3020 0.3293 0.15],...
+    'String',num2str(offsets(2,1)),'FontSize',8);
+   % function edit_low_dc(~,~)
+   %      offsets(2,1) = str2num(ed_low_dc.String);
+   %      ed_low_dc.String = num2str(offsets(2,1));
+   %      ed_low_dc.Value = offsets(2,1);
+   % end
+ed_low_ac = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.6437 0.3020 0.3293 0.15],...
+    'String',num2str(offsets(2,2)),'FontSize',8);
+   % function edit_low_ac(~,~)
+   %      offsets(2,2) = str2num(ed_low_ac.String);
+   %      ed_low_ac.String = num2str(offsets(2,2));
+   %      ed_low_ac.Value = offsets(2,2);
+   % end
+
+ed_sat_dc = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.2717 0.5577 0.3293 0.15],...
+    'String',num2str(offsets(1,1)),'FontSize',8);
+   % function edit_sat_dc(~,~)
+   %      offsets(1,1) = str2num(ed_sat_dc.String);
+   %      ed_sat_dc.String = num2str(offsets(1,1));
+   %      ed_sat_dc.Value = offsets(1,1);
+   % end
+ed_sat_ac = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.6437 0.5577 0.3293 0.15],...
+    'String',num2str(offsets(1,2)),'FontSize',8);
+   % function edit_sat_ac(~,~)
+   %      offsets(1,2) = str2num(ed_sat_ac.String);
+   %      ed_sat_ac.String = num2str(offsets(1,2));
+   %      ed_sat_ac.Value = offsets(1,2);
+   % end
+txt_offst = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.0260 0.8211 0.2000 0.1600],'string','Offsets','FontSize',10);
+txt_sat = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.0260 0.5894 0.2000 0.1600],'string','Sat','FontSize',10);
+txt_low = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.0260 0.3231 0.2000 0.1600],'string','Low','FontSize',10);
+
+txt_DC = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.3434 0.8000 0.2000 0.1600],'string','DC','FontSize',10);
+txt_AC = uicontrol('Parent',pan_off,'style','text','units','normalized','position',[0.7154 0.8000 0.2000 0.1600],'string','AC','FontSize',10);
+
+off_button = uicontrol('Parent',pan_off,'Style','pushbutton','units','normalized','position',[0.6778 0.0049 0.3132 0.2241],'string','Calculate','callback',@cal_offset)
+    function cal_offset(~,~)
+        radio_off = [rb_off1.Value rb_off2.Value];
+        offset_case = find(radio_off==1);
+    switch offset_case
+        case 1
+            disp('You have to choose Manual for calculate the offsets')
+            off_bool=0;
+        case 2
+            off_bool=1;
+            offsets = calculate_offests(cal_trace);
+            ed_low_dc.String = num2str(offsets(2,1));
+            ed_low_ac.String = num2str(real(offsets(2,2)));
+            ed_sat_dc.String = num2str(offsets(1,1));
+            ed_sat_ac.String = num2str(real(offsets(1,2)));
+    end
+        
+    end
+
+
+pan2 =uipanel(fig_choose,'units','normalized','position',[0.0476 0.1232 0.9036 0.3674]);
+txt_par = uicontrol('Parent',pan2,'style','text','units','normalized','position',[-0.0137 0.8250 0.3473 0.1886],...
+    'String','Parameters','FontSize',12);
+
+txt_cse = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.0461 0.5771 0.2849 0.2857],...
+    'String','Capacitance (F)','FontSize',8);
+
+ed_cse = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.0311 0.5027 0.2849 0.1802],...
+    'String',num2str(cse),'Value',cse,'FontSize',8,'Callback',@edit_cse);
+   function edit_cse(~,~)
+        cse = str2num(ed_cse.String);
+        ed_cse.String = num2str(cse);
+        ed_cse.Value = cse;
+    end
+
+txt_rse = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.3798 0.5937 0.2767 0.2691],...
+    'String','S.Resistance (MOhm)','FontSize',8);
+
+ed_rse = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.3686 0.5027 0.2849 0.1802],...
+    'String',num2str(Rs_calculated/1e6),'Value',Rs_calculated,'FontSize',8,'Callback',@edit_rse);
+    function edit_rse(~,~)
+        Rs_calculated = str2num(ed_rse.String)*1e6;
+        ed_rse.String = num2str(Rs_calculated/1e6);
+        ed_rse.Value = Rs_calculated/1e6;
+    end
+
+
+txt_freq = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.7176 0.5326 0.2421 0.3302],...
+    'String','Frequency (KHz)','FontSize',8);
+
+ed_freq = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.6947 0.5027 0.2849 0.1802],...
+    'String',num2str(freq/1000),'Value',freq,'FontSize',8,'Callback',@edit_freq);
+    function edit_freq(~,~)
+        freq = str2num(ed_freq.String)*1e3;
+        ed_freq.String = num2str(freq/1e3);
+        ed_freq.Value = freq/1e3;
+    end
+
+txt_rg = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.0318 0.3417 0.2768 0.1085],...
+    'String','R Gain (Ohm)','FontSize',8);
+
+ed_rg = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.0311 0.1686 0.2849 0.1802],...
+    'String',num2str(Gain_Resistor,'%.e '),'Value',Gain_Resistor,'FontSize',8,'Callback',@edit_rg);
+    function edit_rg(~,~)
+        Gain_Resistor = str2num(Gain_Resistor.String);
+        ed_rg.String = num2str(Gain_Resistor,'%.e ');
+        ed_rg.Value = Gain_Resistor/1e3;
+    end
+
+txt_rpt = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.3798 0.3283 0.2929 0.1220],...
+    'String','HOT (Ohm/Celsius)','FontSize',8);
+txt_tpt = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.3798 4.7170e-04 0.2929 0.1220],...
+    'String',[num2str(Temp_tip) ' K'],'FontSize',8);
+ed_rpt = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.3676 0.1686 0.14 0.1802],...
+    'String',num2str(Pt_resistor_tip),'Value',Pt_resistor_tip,'FontSize',8,'Callback',@edit_rpt);
+    function edit_rpt(~,~)
+        Pt_resistor_tip = str2num(ed_rpt.String);
+        ed_rpt.String = num2str(Pt_resistor_tip);
+        ed_rpt.Value = Pt_resistor_tip;
+        Temp_tip = temperature_resistor(Pt_resistor_tip);
+        txt_tpt.String = [num2str(Temp_tip) ' K'];
+        ed_rpt_c.String = num2str(Temp_tip);
+        ed_rpt_c.Value = Temp_tip;
+    end
+ed_rpt_c = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.5138 0.1686 0.14 0.1802],...
+    'String',num2str(Temp_tip),'Value',Temp_tip,'FontSize',8,'Callback',@edit_rpt_c);
+    function edit_rpt_c(~,~)
+
+        Temp_tip = str2num(ed_rpt_c.String);
+        ed_rpt_c.String = num2str(Temp_tip);
+        ed_rpt_c.Value = Temp_tip;
+        Pt_resistor_tip = resistor_temperature(Temp_tip);
+        ed_rpt.String = num2str(Pt_resistor_tip);
+        ed_rpt.Value = Pt_resistor_tip;
+        txt_tpt.String = [num2str(Temp_tip) ' K'];
+    end
+
+txt_rps = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.6947 0.3283 0.2929 0.1220],...
+    'String','COLD (Ohm/Celsius)','FontSize',8);
+txt_tps = uicontrol('Parent',pan2,'style','text','units','normalized','position',[0.6947 4.7170e-04 0.2929 0.1220],...
+    'String',[num2str(Temp_substrate) ' K'],'FontSize',8);
+ed_rps = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.6923 0.1686 0.1400 0.1802],...
+    'String',num2str(Pt_resistor_substrate),'Value',Pt_resistor_substrate,'FontSize',8,'Callback',@edit_rps);
+    function edit_rps(~,~)
+        Pt_resistor_substrate = str2num(ed_rps.String);
+        ed_rps.String = num2str(Pt_resistor_substrate);
+        ed_rps.Value = Pt_resistor_substrate;
+        Temp_substrate = temperature_resistor(Pt_resistor_substrate);
+        ed_rps_c.String = num2str(Temp_substrate);
+        ed_rps_c.Value = Temp_substrate;
+
+        txt_tps.String = [num2str(Temp_substrate) ' K'];
+    end
+ed_rps_c = uicontrol('Parent',pan2,'style','edit','units','normalized','position',[0.8398 0.1686 0.1400 0.1802],...
+    'String',num2str(Temp_substrate),'Value',Temp_substrate,'FontSize',8,'Callback',@edit_rps_c);
+    function edit_rps_c(~,~)
+        Temp_substrate = str2num(ed_rps_c.String);
+        ed_rps_c.String = num2str(Temp_substrate);
+        ed_rps_c.Value = Temp_substrate;
+        Pt_resistor_substrate = resistor_temperature(Temp_substrate);
+        ed_rps.String = num2str(Pt_resistor_substrate);
+        ed_rps.Value = Pt_resistor_substrate;
+
+        txt_tps.String = [num2str(Temp_substrate) ' K'];
+    end
+
+
+ed_file_name =uicontrol(fig_choose,'style','edit','units','normalized','Position',[0.0483 0.0110 0.4843 0.1027],'String',save_filename,'Fontsize',7,'Callback',@fun_ed_name);
+    function fun_ed_name(~,~)
+        save_filename = ed_file_name.String;
+    end
+bt_do =uicontrol(fig_choose,'style','pushbutton','units','normalized','Position',[0.5320 0.0110 0.4192 0.1027],'String','Do Analysis','Callback',@fun_do);
+    function fun_do(~,~)
+        radio = [rb1.Value rb2.Value];
+        case_program = find(radio==1);
+        %close(fig_choose)
+        doanalysis(case_program,Rs_calculated,cse,freq,cal_trace,Temp_tip,Temp_substrate,piezo_factor);
+    end
+disp('f')
+
+%% Functions
+    function doanalysis(caso,Series_Resistor,Series_Capacitor,Frequency,Trace_Calibration,Temp_tip,Temp_sub,calib_piezo)
+
+        switch caso
+            case 1 % Calibration
+
+               
+                folder_trace_dc = ({dir(fullfile(selpath,'Dc*.csv')).name}) ;
+                folder_trace_acx = ({dir(fullfile(selpath,'AcX*.csv')).name}) ;
+                folder_trace_acy = ({dir(fullfile(selpath,'AcY*.csv')).name}) ;
+                folder_piezo = ({dir(fullfile(selpath,'piezo*.csv')).name});
+
+                number_trace = Trace_Calibration;
+
+                file_piezo= folder_piezo{number_trace};
+                file_trace_dc= folder_trace_dc{number_trace};
+                file_trace_acx= folder_trace_acx{number_trace};
+                file_trace_acy= folder_trace_acy{number_trace};
+
+                piezo_bit = csvread(file_piezo);
+                traces_bit_dc = csvread(file_trace_dc);
+                traces_bit_acx = csvread(file_trace_acx);
+                traces_bit_acy = csvread(file_trace_acy);
+
+       
+                piezo_raw = piezo_bit(2:end-1).*(10/32768)-10;             % Bit to volt function of 16 bits Adwin
+                traces_dc = traces_bit_dc(2:end-1).*(10/8388608)-10;       % Bit to volt function of 24 bits Adwin
+                traces_acx_rms = traces_bit_acx(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+                traces_acy_rms = traces_bit_acy(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+
+                traces_acy = traces_acy_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
+                traces_acx = traces_acx_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
+                piezo = piezo_raw*calib_piezo;                                % Voltage divisor at the Adwin output 1/50
+                %piezo = piezo_volt*2.4e-7;                                 % Volts to m conversion 2.4e-8 [m/V]
+
+
+                [Z, g_ac] = conductanceac(traces_acx,traces_acy,Series_Capacitor,Series_Resistor,Frequency, piezo);
+                G_ac=log10((real(g_ac))./G0);
+                [g_dc] = cunductancedc(traces_dc,Series_Resistor,Frequency,piezo);
+                G_dc=log10(abs(real(g_dc))./G0);
+     
+
+                figure
+                plot(Z,G_dc,'k');
+                hold on
+                plot(Z,G_ac,'r','linewidth',1);
+                legend('DC','AC')
+                xlabel('Displacement (nm)')
+                ylabel('log (G/G_0)')
+
+            case 2 % Measurement
+
+                disp('Analysis Started')
+                folder_trace_dc = ({dir(fullfile(selpath,'Dc*.csv')).name}) ;
+                folder_trace_acx = ({dir(fullfile(selpath,'AcX*.csv')).name}) ;
+                folder_trace_acy = ({dir(fullfile(selpath,'AcY*.csv')).name}) ;
+                folder_piezo = ({dir(fullfile(selpath,'piezo*.csv')).name});
+
+
+                for i= 1:length(folder_piezo)
+
+                    file_piezo= folder_piezo{i};
+                    file_trace_dc= folder_trace_dc{i};
+                    file_trace_acx= folder_trace_acx{i};
+                    file_trace_acy= folder_trace_acy{i};
+
+                    if isempty(file_piezo)
+                        continue
+                    end
+
+                    piezo_bit = csvread(file_piezo);
+                    traces_bit_dc = csvread(file_trace_dc);
+                    traces_bit_acx = csvread(file_trace_acx);
+                    traces_bit_acy = csvread(file_trace_acy);
+
+                    piezo_raw = piezo_bit(2:end-1).*(10/32768)-10;             % Bit to volt function of 16 bits Adwin
+                    traces_dc = traces_bit_dc(2:end-1).*(10/8388608)-10;       % Bit to volt function of 24 bits Adwin
+                    traces_acx_rms = traces_bit_acx(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+                    traces_acy_rms = traces_bit_acy(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+
+                    traces_acy = traces_acy_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
+                    traces_acx = traces_acx_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
+                    piezo = piezo_raw*calib_piezo;                                % Voltage divisor at the Adwin output 1/50 
+                    %piezo = piezo_volt*2.4e-7;                                 % Volts to m conversion 2.4e-8 [m/V] 
+
+                    if size(traces_acx)<310 
+                        continue
+                    end
+               
+
+                    [Z, g_ac] = conductanceac(traces_acx,traces_acy,Series_Capacitor,Series_Resistor,Frequency, piezo);  % nm, G/G0
+                    G_ac=log10(abs(real(g_ac))./G0);
+
+                    [Vth, DT] = thermovoltage_calculator(G_ac,traces_dc,Series_Resistor,Frequency,Gain_Resistor,Temp_tip,Temp_substrate);   % Volts, K 
+                    log_g=G_ac;
+                    top_g=mean(log_g(20:120));
+                    botom_g=mean(log_g(end-120:end-20));
+
+                    if top_g<-0.5
+                        remove=remove+1;
+                        remove_top=remove_top+1;
+                        continue
+                    end
+                    if botom_g>-4
+                        remove=remove+1;
+                        remove_botom=remove_botom+1;
+                        continue
+                    end
+                    if modulation ==1
+                        piezo_i = -Z./1e3;
+                        piezo_norm = piezo_i./max(piezo_i);
+                        dp = diff(piezo_norm);
+                        length_time = length(dp(dp==0));
+                        if length_time<50
+                            remove=remove+1;
+                            remove_modulation=remove_modulation+1;
+                            continue
+                        end
+
+                    end
+
+                    if size(G_ac)==size(Z)     % Creation of the final saved structure
+                        ind=ind+1;
+                        curva(ind).g=abs(real(g_ac))./G0;   % Conductance G/G0
+                        curva(ind).z=Z;                     % Distance nm
+                        curva(ind).piezoV=(-Z/1e3);         % Distance Volts
+                        curva(ind).vth=Vth;                 % Thermovoltage mV
+                        curva(ind).Temp=DT;                 % Temperature K
+                        G_tot=[G_tot;G_ac];
+                        Vth_tot=[Vth_tot;Vth];
+                        Z_tot=[Z_tot; Z];
+                    end
+                end
+                curva(1).Info.Vbias = {[num2str(Vb) ' mV']};
+                disp(['Removed traces: ' num2str(remove)]);
+                disp(['Removed traces File: ' num2str(remove_file)]);
+                disp(['Removed traces Top: ' num2str(remove_top)]);
+                disp(['Removed traces Botom: ' num2str(remove_botom)]);
+                disp(['Removed traces Modulation: ' num2str(remove_modulation)]);
+                disp(['Collected traces: ' num2str(length(curva))]);
+
+                cd(current)
+                
+                curva(1).numtraces=ind;
+                curva(1).info='Traces are saved in curva(i).g in G/G0 linear scale and in curva(i).z in nm';
+                fig=figure('units','normalized','Position',[0.2693 0.0750 0.4312 0.8056]);
+                ax1=axes(fig,'units','normalized','Position',[0.1685 0.5787 0.7719 0.3925]);
+                
+                x_lim=[-0.27 1.5];
+                y_lim=[-6.8 2];
+                eje0=[x_lim(1),x_lim(2),y_lim(1),y_lim(2)];
+
+                sig=0.8;
+                nhi20=30;
+                namess{1}='2D';
+                axesLabel={'Distance (nm)','log(G/G_0)'};
+                Hist2D(ax1,Z_tot,G_tot,eje0,sig,nhi20,namess,axesLabel);
+
+
+                ax2=axes(fig,'units','normalized','Position',[0.1685 0.0845 0.7719 0.3925]);
+                 
+
+                x_lim2=[-0.27 1.5];
+                y_lim2=[-1 1];
+                eje0=[x_lim2(1),x_lim2(2),y_lim2(1),y_lim2(2)];
+
+                sig=1;
+                nhi20=30;
+                namess{1}='2D';
+                axesLabel={'Distance (nm)','V_{th} (mV)'};
+                Hist2D(ax2,Z_tot,Vth_tot*1e3,eje0,sig,nhi20,namess,axesLabel);
+
+                save([selpath '\' save_filename],'curva', '-v7.3')
+
+                cd(selpath);
+                disp('Done')
+         
+        end
+    end
+%% Functions
+    function val_off = calculate_offests(trace_ind)
+
+        val_off=zeros(2,2);
+        folder_trace_dc = ({dir(fullfile(selpath,'Dc*.csv')).name}) ;
+        folder_trace_acx = ({dir(fullfile(selpath,'AcX*.csv')).name}) ;
+        folder_trace_acy = ({dir(fullfile(selpath,'AcY*.csv')).name}) ;
+        folder_piezo = ({dir(fullfile(selpath,'piezo*.csv')).name});
+
+        number_trace = trace_ind;
+        offay = [];
+        offax = [];
+        offdc = [];
+        % figure
+
+        for h1=3:100
+
+            file_piezo= folder_piezo{h1};
+            file_trace_dc= folder_trace_dc{h1};
+            file_trace_acx= folder_trace_acx{h1};
+            file_trace_acy= folder_trace_acy{h1};
+
+            piezo_bit = csvread(file_piezo);
+            traces_bit_dc = csvread(file_trace_dc);
+            traces_bit_acx = csvread(file_trace_acx);
+            traces_bit_acy = csvread(file_trace_acy);
+
+            piezo = piezo_bit(2:end-1).*(10/8388608)-10;
+            traces_dc = traces_bit_dc(2:end-1).*(10/8388608)-10;
+            traces_acx_rms = traces_bit_acx(1:end).*(10/8388608)-10;
+            traces_acy_rms = traces_bit_acy(1:end).*(10/8388608)-10;
+
+            traces_acy = traces_acy_rms(2:end-1)*sqrt(2);
+            traces_acx = traces_acx_rms(2:end-1)*sqrt(2);
+
+            % Offsets AC
+            smooth_acx = medfilt1(traces_acx,sgolay_filter);
+            smooth_acy = medfilt1(traces_acy,sgolay_filter);
+            va=complex(smooth_acx,smooth_acy);
+            lca=length(va);
+            cuta=round(lca/20);
+
+            xx_cut = smooth_acx(end-cuta:end-40);
+            xx_ind = linspace(length(smooth_acx)-cuta,length(smooth_acx)-40,length(xx_cut));
+
+            acx_zero = smooth_acx;% -mean(xx_cut);
+            yy_cut=smooth(acx_zero(cuta:2*cuta));
+            yy_ind = linspace(cuta,2*cuta,length(yy_cut));
+
+            dc_lowpass = medfilt1(traces_dc,sgolay_filter*4);
+            % 
+            % plot(dc_lowpass);
+            % hold on
+
+            offax = [offax; smooth_acx];
+            offay = [offay; smooth_acy];
+            offdc = [offdc; dc_lowpass];
+        end
+        [Np,edgesp] = histcounts(offax,50);%, 'Normalization', 'pdf');
+        xx5p=(edgesp(1:end-1)+edgesp(2:end))/2;
+        zerx = Np(xx5p<0.5);
+        xzerx = xx5p(xx5p<0.5);
+        [val, inzerx] = max(zerx);
+
+        topx = Np(xx5p>0.5);
+        xtopx = xx5p(xx5p>0.5);
+        [val, intopx] = max(topx);
+        
+        ax_zer = xzerx(inzerx);
+        ax_top = xtopx(intopx)-ax_zer;
+
+        [N,edges] = histcounts(offay,50);%, 'Normalization', 'pdf');
+        xx5=(edges(1:end-1)+edges(2:end))/2;
+        zery = N(xx5<-0.5);
+        xzery = xx5(xx5<-0.5);
+        [val, inzery] = max(zery);
+
+        topy = N(xx5>-0.5);
+        xtopy = xx5(xx5>-0.5);
+        [val, intopy] = max(topy);
+        
+        ay_zer = xzery(inzery);
+        ay_top = xtopy(intopy)-ay_zer;
+
+        AC_zer = complex(ax_zer,ay_zer);
+        AC_top = complex(ax_top,ay_top);
+
+        % figure
+        % plot(xx5p,Np)
+        [Nd,edgesd] = histcounts(offdc,50);%, 'Normalization', 'pdf');
+        xx5d=(edgesd(1:end-1)+edgesd(2:end))/2;
+
+        zerd = Nd(xx5d<0.01);
+        xzerd = xx5d(xx5d<0.01);
+        [val, inzerd] = max(zerd);
+
+        topd = Nd(xx5d>0.01);
+        xtopd = xx5d(xx5d>0.01);
+        [val, intopd] = max(topd);
+        
+        dc_zer = xzerd(inzerd);
+        dc_top = xtopd(intopd)-dc_zer;
+
+
+        % figure
+        % plot(xx5d,Nd)
+
+       
+        val_off(2,2) = AC_zer;  % Offset AC Low
+
+        val_off(1,2) = AC_top ;  % Offset AC Saturation
+
+        val_off(2,1) = dc_zer;   % Offset DC Low
+
+        val_off(1,1) = dc_top;    % Offset DC Saturation
+
+    end
+    function [Vth_smooth, DT] = thermovoltage_calculator(lG,dc,rserie,freq,Rg,T_tip,T_subs)
+       
+        G0=7.75e-5;
+        DT = T_tip-T_subs;
+        lG_f = medfilt1(lG,sgolay_filter*2);
+        G = 10.^lG_f;
+        Rj = 1./(abs(G*G0));
+        dc = dc./5;             % IN THE LOCKIN WE ARE DIVIDING BY 5
+
+
+        c_dc=round(length(dc)/15);
+        dc_lowpass = medfilt1(dc,sgolay_filter*4);
+        vv_zer=mean(dc_lowpass(end-2*c_dc:end-c_dc));
+        if off_bool==0
+            vv_1=dc_lowpass-vv_zer;  % Volts
+            Ith=vv_1./Rg;            % Amplifier Resistor  Amps
+            Isat=mean(Ith(c_dc:2*c_dc));  %
+            Vof=Isat*rserie;
+            Vth_raw = Ith.*(rserie+Rj)-Vof;  % Volts
+            Vth = Vth_raw;
+            Vth_smooth=Vth;
+        else
+            vv_1=dc_lowpass-offsets(2,1);  % Volts
+            Ith=vv_1./Rg;            % Amplifier Resistor  Amps
+            Isat=offsets(1,1)./Rg;  %
+            Vof=Isat*rserie;
+            Vth_raw = Ith.*(rserie+Rj)-Vof;  % Volts
+            Vth = Vth_raw;
+            Vth_smooth=Vth;
+        end
+
+    end
+
+    function [Z_fin, g_ac] = conductanceac(ac_x,ac_y,cse_fun,rserie_fun,freq,piezo_volt)
+
+        G0=7.748e-5;
+        smooth_acx = medfilt1(ac_x,sgolay_filter);
+        smooth_acy = medfilt1(ac_y,sgolay_filter);
+        va=complex(smooth_acx,smooth_acy);
+        lca=length(va);
+        cuta=round(lca/20);
+        if off_bool==0
+           
+            vac_zer1=mean(smooth(va(end-cuta:end)));
+            vac_zer=(va-vac_zer1);
+            vac_sat=mean(smooth(vac_zer(2*cuta:3*cuta)));
+            vac_norm=vac_zer./vac_sat;
+        else
+            vac_zer1=offsets(2,2);
+            vac_zer=(va-vac_zer1);
+            vac_sat=offsets(1,2);
+            vac_norm=vac_zer./vac_sat;
+        end
+
+        para= @(x,y) (x.*y)./(x+y);
+        freq1=(-1j)/(2*pi*freq*cse_fun);
+        zs1=para(rserie_fun,freq1);
+        g_ac=(vac_norm./zs1)./(1.001-vac_norm);
+
+        G_ac=log10(abs(real(g_ac))./G0);
+        g_smooth = (G_ac);
+
+       % Z=(-piezo_volt*1e-6)*1e9;
+        Z=(-piezo_volt);  % meters to nm
+        tiempo = linspace(1,length(Z),length(Z));
+        Z_zer1 = (Z(g_smooth>-0.3 & g_smooth<0.1));
+        tiempo_zer1 = (tiempo(g_smooth>-0.3 & g_smooth<0.1));
+        if ~isempty(Z_zer1)
+            Z_zer = Z_zer1(end);
+            tiempo_zer = tiempo_zer1(end);
+        else
+            Z_zer =0;
+        end
+        Z_fin = Z-Z_zer;
+    end
+
+    function [g_dc] = cunductancedc(traces_dc,rserie_fun,freq_dc,piezo_v)
+
+        G0=7.75e-5;
+        traces_dc = traces_dc./5;
+        dc_filtered = medfilt1(traces_dc,sgolay_filter);
+        lca=length(dc_filtered);
+        cuta=round(lca/29);
+        vdc_zer1=mean(dc_filtered(end-cuta:end));
+        vdc_zer=(dc_filtered-vdc_zer1);
+        vdc_sat=mean(vdc_zer(2*cuta:3*cuta));
+        vdc_norm=vdc_zer./vdc_sat;
+        g_dc=(vdc_norm./rserie_fun)./(1.001-vdc_norm);
+        G_dc=log10(abs(real(g_dc))./G0);
+        Z=(-piezo_v*1e-6)*1e9;
+
+    end
+    function Temp = temperature_resistor(T_res)
+        Temp = -(sqrt(-0.00232*T_res + 17.59246)-3.908)/0.00116;
+    end
+    function Resistor = resistor_temperature(Tem)
+        Resistor = (-(-Tem*0.00116 +3.908)^2+17.59246)/0.00232;
+    end
+
+
+    function [data,l] = Hist2D(ha,dataxx,datayy,eje0,radio,altura,namess,axesLabel,inform,axpos,num)
+
+        global grosorcurva labelsize grosorejes fontejes letrasize labelsizein
+
+        axes(ha)
+        eje.x = eje0(1:2);
+        eje.y = eje0(3:4);
+
+        nxb = linspace(eje.x(1),eje.x(2),160);
+        nyb = linspace(eje.y(1),eje.y(2),160);
+        % COMENTADO POR JUAN
+        % res2 = round((max(eje.y)-min(eje.y))/bins);
+        % res1 = res2;
+        % if res1>300; res1 = 300; res2 = 300; end
+        % bins = (max(eje.x)-min(eje.x))/res1;
+        %COMENTADO POR JUAN
+
+        % histograma de Andrés
+        % res1=256;
+        % res2=256;
+        %C5ambio Juan
+        % res1=530;
+        % res2=566;
+
+        res1=550;
+        res2=550;
+        %res1=1080;
+        %res2=1080;
+        bins = (max(eje.x)-min(eje.x))/res1;
+        %bins=100;
+        %Cambio Juan
+        fun = 'gauss';
+        con = 'conv2';
+        Rx = radio;
+        Ry = Rx;
+        Rs = 2; %da igual para la gaussiana
+
+        ind = find(dataxx > eje.x(1) & dataxx < eje.x(2));
+
+        hh.x = dataxx(ind);
+        hh.y = datayy(ind);
+        ind = find(hh.y > eje.y(1) & hh.y < eje.y(2));
+        hh.x = hh.x(ind);
+        hh.y = hh.y(ind);
+
+        limites = [eje.x eje.y];
+        [H,vX,vY,F] = hist2conv(hh.x,hh.y,limites,res1,res2,fun,con,Rx,Ry,Rs);
+
+
+
+        normf = sum(H(:))*bins^2;
+        normf = 1;
+
+
+
+        box on
+        grid on
+        colm = load('mycolormap.mat');
+        %colm = load('colormap_new.mat');
+        %colormap(colm.mycmap);
+        colormap(jet)
+        %colormapeditor
+        hhiloA = pcolor(vX,vY,H'/normf);
+        set(hhiloA,'linestyle','none');
+
+        caxis ([0 altura/normf])
+
+        inform.Hisdata.vX = vX;
+        inform.Hisdata.vY = vY;
+        inform.Hisdata.H = H;
+        inform.initialData.x = dataxx;
+        inform.initialData.y = datayy;
+        inform.binsize = bins;
+        inform.normFactor = normf;
+
+        if ~isempty(axesLabel)
+            xlabel(axesLabel{1});%,'FontSize',12);
+            ylabel(axesLabel{2});%,'FontSize',12);
+        end
+        p = [];
+        for n = 1:length(namess)
+            modifnamef = strrep(namess{n}, '_', '\_');
+            p=[p modifnamef];
+        end
+
+        data = inform;
+        l.pname = p;
+
+        %set(ha,'Fontsize',13);
+        %set(ha,'linewidth',2,'TickLength',[0.015 0.015]);
+
+
+    end
+    function [H,vX,vY,F] = hist2conv(X,Y,limites,res1,res2,fun,con,Rx,Ry,Rs)
+
+        % H = hist2conv(X,Y,res1,res2,fun,R1,R2,R3) devuelve la matriz resultante
+        % de convolucionar los datos X,Y con una matriz rellena según la función
+        % fun. El resultado es una matriz res1xres1.
+        %  Rx = radio en X
+        %  Ry = radio en Y
+        %  Rs = parametro de smearing
+        %  fun = {'gauss','bell'}
+
+        % Si no introducimos smearing lo toma como 1
+        if nargin == 8
+            Rs = 1;
+        end
+
+
+        % Calculamos la matriz de Kronecker de nuestros datos XY
+        %K = hist3([X,Y],[res1,res1]) ;
+        %vX = linspace(min(X),max(X),res1+1);
+        %vY = linspace(min(Y),max(Y),res1+1);
+
+        %modificado por Nicolás: los límites son comunes a varios histogramas, así
+        %el fondo queda uniforme
+        vX = linspace(limites(1),limites(2),res1+1);
+        vY = linspace(limites(3),limites(4),res1+1);
+        [nxout,xout]=hist(X,length(vX));
+        Unim = ones(1,length(vX));
+        norm = Unim'*nxout;
+        K = hist3([X,Y],{vX,vY}) ;
+        %K = K./norm';
+
+
+        % Calculamos la matriz F con la que vamos a convolucionar
+        switch fun
+            case 'gauss'
+                Fx = gaussmf(1:res2,[Rx,res2/2+1]);
+                Fy = gaussmf(1:res2,[Ry,res2/2+1]);
+                F = Fy'*Fx;
+            case 'bell'
+                Fx = gbellmf(1:res2,[Rx,Rs,res2/2+1]);
+                Fy = gbellmf(1:res2,[Ry,Rs,res2/2+1]);
+                F = Fy'*Fx;
+            case 'user'
+                Fx = gauss2mf(1:res2,[Rx,res2/2+1,Ry,res2/2+1]);
+                Fy = gauss2mf(1:res2,[Rx,res2/2+1,Ry,res2/2+1]);
+                F = Fy'*Fx;
+            otherwise
+                disp('function not recognised: USING GAUSS');
+                Fx = gaussmf(1:res2,[Rx,res2/2+1]);
+                Fy = gaussmf(1:res2,[Ry,res2/2+1]);
+                F = Fy'*Fx;
+        end
+
+        % Calculamos la matriz de convolución H
+        %H = conv2(K,F,'shape');
+        switch con
+            case 'conv2'
+                %          H = conv2(K,F,'shape'); %%%SHAPE must be 'full', 'same', or 'valid'.
+                H = conv2(K,F,'same');
+            case 'conv2fft'
+                H = conv2fft(K,F);
+            otherwise
+                disp('conv2 kind not recognized: USING CONV2');
+                H = conv2(K,F,'shape');
+        end
+        H(res1+1,:)=0;
+        H(:,res1+1)=0;
+
+
+
+
+    end
+    function [h,x,y] = hist2pdf2D(dat,res,sig)
+        % dat : is a 2 column matrix ([X Y])
+        % res : number of points on each side (histogram boxes = res^2)
+        % sig : [sigx sigy] sigma of gaussian in x and y (in units of the x-axis and y-axis)
+        % The integral of the pdf is the number of elements in dat
+
+
+        %dat = .5*rand(100,2);
+        %dat = [dat; .9 .9; .9 .9; .1 .9; .1 .9];
+        %res = 50;
+        %sig = [.01 .01];
+
+        %figure(100)
+        %hist3(dat,[res res])
+
+        [K,C] = hist3(dat,[res res]);
+
+        dx = mean(C{1}(2:end)-C{1}(1:end-1));
+        dy = mean(C{2}(2:end)-C{2}(1:end-1));
+
+        if mod(res,2)==0 %is even, ng debe ser siempre impar
+            ng = res+1;
+        else
+            ng = res;
+        end
+
+        xx = dx*((1:ng)-ceil(ng/2));
+        yy = dy*((1:ng)-ceil(ng/2));
+        %definimos la gaussiana en el mismo intervalo del histograma
+        Fx = gaussmf(xx,[sig(1),0]);
+        Fy = gaussmf(yy,[sig(2),0]);
+        F = Fy'*Fx;
+        F = F/sig(1)/sig(2)/2/pi;
+
+        %H = conv2(K,F,'shape');
+        H = conv2(K,F,'same');
+        if ~nargout
+            %surf(C{1},C{2},H')
+            contourf(C{1},C{2},H',50,'linestyle','none')
+            xlabel('Z (nm)')
+            ylabel('Conductance log(G/G_0)')
+            title('G0-11C')
+        else
+            h = H';
+            x = C{1};
+            y = C{2};
+        end
+        disp(' ')
+    end
+end
