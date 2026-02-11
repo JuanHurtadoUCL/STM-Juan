@@ -1,6 +1,10 @@
 % Preliminary code for Kmeans UCLouvain
+function AC_clustering_UCL_Conductance_V4(varargin)
 
+len_input=length(varargin);
 %[file,path] = uigetfile;
+if len_input==0
+
 [file path] = uigetfile({'*.*'},'chose blq or mat', 'MultiSelect','on' );
 if isequal(file,0)
     disp('User selected Cancel');
@@ -45,6 +49,12 @@ else
     title_ini=file{1}(1:end-4);
 end
 
+else
+    disp('f')
+    curva_ini=varargin{1};
+    title_ini='No Title';
+    path = varargin{2};
+end
 
 limits_general1 = [-0.25 2;    % Xlimits
                    1e-5 3;     % Ylimits
@@ -1781,4 +1791,5 @@ else
     y = C{2};
 end
 disp(' ')
+end
 end
