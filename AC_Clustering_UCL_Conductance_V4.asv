@@ -21,24 +21,16 @@ t=length(file);
 curva=[];
 if iscell(file)==0
     cura =load([path '\' file]);
+    if
 
-    if isfield(cura, 'curva_ini')
-        curva_ini=cura.curva_ini;
-    else
-        curva_ini=cura.curva;
-    end
-
+        end
+    curva_ini=cura.curva_ini;
     title_ini=file(1:end-4);
 else
     for m=1:t
         curva{m}=[];
         cura =load([path '\' file{m}]);
-        if isfield(cura, 'curva_ini')
-            curva{m}=cura.curva_ini;
-        else
-            curva{m}=cura.curva;
-        end
-      
+        curva{m}=cura.curva_ini;
         length_curva(m)=length(curva{m});
     end
     curva_ini = struct();

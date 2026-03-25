@@ -18,7 +18,7 @@ current = fileparts(mfilename('fullpath'));
 %end
 %cd(selpath)
 
-Vb=0.025;                             % Vbias (As appears in the lockin box)
+Vb=0.030;                             % Vbias (As appears in the lockin box)
 G0=7.748e-5;
 modulation = 0;
 %num_trace=[9053 21158];            % Number of the traces. First one and Last One
