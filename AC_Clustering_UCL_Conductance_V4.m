@@ -852,16 +852,27 @@ but_linear = uicontrol('style','pushbutton','Parent',hp_linear,'units','normaliz
         glin_lim = 5;
         G_lin = [];
         Z_lin = [];
+        V_lin = [];
+        S_lin = [];
         for k3 = 1:length(curva)
             zz=curva(k3).z;
             gg=(curva(k3).g);
+            vv = smoothdata(curva(k3).vth*1e3,filter_type,filter_ord);
+            Temp = curva(k3).Temp;
+
             z_cut1 = zz(zz>xlimit(1) & zz<xlimit(2)); % & gg<glin_lim);
             g_cut1 = gg(zz>xlimit(1) & zz<xlimit(2)); % & gg<glin_lim);
+            vv_cut1 = vv(zz>xlimit(1) & zz<xlimit(2));
+            ss_cut1 = -vv_cut1.*1e3/Temp;
             z_cut = z_cut1(g_cut1<glin_lim);
             g_cut = g_cut1(g_cut1<glin_lim);
+            v_cut = vv_cut1(g_cut1<glin_lim);
+            s_cut = ss_cut1(g_cut1<glin_lim);
 
             G_lin=[G_lin; g_cut];
             Z_lin=[Z_lin; z_cut];
+            V_lin=[V_lin; v_cut];
+            S_lin=[S_lin; s_cut];
         end
 
         f_lin = figure;
@@ -874,6 +885,17 @@ but_linear = uicontrol('style','pushbutton','Parent',hp_linear,'units','normaliz
         Hist2D(ax_lin,Z_lin,G_lin,eje0,sig+0.3,nhi20,namess,axesLabel,sat_2d);
         xlim(ax_lin,[xlimit]);
         ylim(ax_lin,[0 glin_lim]);
+
+        f_lins = figure;
+        ax_lins = axes(f_lins);
+        eje0=[0.05,glin_lim-0.05,-5,1];
+        nhi20=30;
+        %f1=figure
+        namess{1}='2D';
+        axesLabel={'G/G_0','S (\muV/K)'};
+        Hist2D(ax_lin,G_lin,S_lin,eje0,sig+0.3,nhi20,namess,axesLabel,sat_2d);
+        xlim(ax_lin,[0 glin_lim]);
+        ylim(ax_lin,[-5 1]);
 
     end
 
@@ -960,7 +982,7 @@ if Seebeck_check ==0
 
 else
     VV_cut =  -VV_cut.*1e3./curva(1).Temp;
-    eje0=[log10(ylimit(1))+0.02,log10(ylimit(2))-0.02,slimit(1)+0.5,slimit(2)-0.5];
+    eje0=[log10(ylimit(1))+0.02,log10(ylimit(2))-0.02,slimit(1)+0.1,slimit(2)-0.1];
     nhi20=30;
 
     %f1=figure
@@ -1113,7 +1135,7 @@ end
 
  else
      VV_cut =  -VV_cut.*1e3./curva(1).Temp;
-     eje0=[xlimit(1)+0.02,xlimit(2)-0.02,slimit(1)+1,slimit(2)-1];
+     eje0=[xlimit(1)+0.02,xlimit(2)-0.02,slimit(1)+0.1,slimit(2)-0.1];
      nhi20=30;
 
      %f1=figure

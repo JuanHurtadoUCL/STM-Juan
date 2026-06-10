@@ -11,7 +11,7 @@ selpath = uigetdir
 factor_piezo=35e-9;                % Volts to m  
 div_piezo = 4.9;
 %=======
-save_filename = 'Konstantz_DC_100mV.mat';  % This is the name of the saved file
+save_filename = 'ope3-1anchor-800mvbis.mat';  % This is the name of the saved file
 cd(selpath)
 Rg=1e8;                             % Gain resistance
 Vb=0.0909;                             % Vbias

@@ -18,7 +18,7 @@ current = fileparts(mfilename('fullpath'));
 %end
 %cd(selpath)
 
-Vb=0.030;                             % Vbias (As appears in the lockin box)
+Vb=0.030/sqrt(2);                             % Vbias (As appears in the lockin box)
 G0=7.748e-5;
 modulation = 0;
 %num_trace=[9053 21158];            % Number of the traces. First one and Last One
@@ -38,7 +38,7 @@ sgolay_filter = 20;
 Rs_calculated = 1.1683e6;
 Gain_Resistor=1e8;                             % Gain resistance
 factor_piezo= 35; % volts to nm
-divisor_piezo = 10; % Divisor piezo
+divisor_piezo = 20; % Divisor piezo
 cse=1.1e-10;  % 4.3e-11
 freq=3.123e3;
 Pt_resistor_tip = 1090; % PT resistance Ohm
@@ -369,7 +369,7 @@ text_rs = uicontrol('Parent',pan_variables,'style','text','units','Normalized','
 edit_rs = uicontrol('Parent',pan_variables,'style','edit','units','Normalized','Position',[0.3146 0.4192 0.1483 0.1813],...
     'String',Rs_calculated,'Value',Rs_calculated,'HorizontalAlignment','center','FontSize',9,'callback',@fun_edit_rs);
     function fun_edit_rs(~,~)
-       Rs_calculated = str2num(edit_rs.String);
+       Rs_calculated = edit_rs.String;
         edit_rs.Value = Rs_calculated;
     end
 text_cse = uicontrol('Parent',pan_variables,'style','text','units','Normalized','Position',[0.4902 0.3950 0.0959 0.1813],...
@@ -426,7 +426,7 @@ disp('f')
                 traces_bit_acx = csvread(file_trace_acx);
                 traces_bit_acy = csvread(file_trace_acy);
 
-       
+       2
                 piezo_raw = piezo_bit(2:end-1).*(10/32768)-10;             % Bit to volt function of 16 bits Adwin
                 traces_dc = traces_bit_dc(2:end-1).*(10/8388608)-10;       % Bit to volt function of 24 bits Adwin
                 traces_acx_rms = traces_bit_acx(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
@@ -785,14 +785,13 @@ end
         threshold_up=max(acx_trace_ret)-((max(acx_trace_ret)-min(acx_trace_ret))*perc_trace_cut/3000);
         threshold_down=min(acx_trace_ret)+((max(acx_trace_ret)-min(acx_trace_ret))*perc_trace_cut/3000);
 
-       % acx_ofsset_contact=mean(smooth(acx_trace_ret(acx_trace_ret>threshold_up)));
-       % acy_ofsset_contact=mean(smooth(acy_trace_ret(acx_trace_ret>threshold_up)));
-       % dc_ofsset_contact=mean(smooth(dc_trace_ret(acx_trace_ret>threshold_up)));
+        acx_ofsset_contact=mean(smooth(acx_trace_ret(acx_trace_ret>threshold_up)));
+        acy_ofsset_contact=mean(smooth(acy_trace_ret(acx_trace_ret>threshold_up)));
+        dc_ofsset_contact=mean(smooth(dc_trace_ret(acx_trace_ret>threshold_up)));
 
-      
-        acx_ofsset_contact=mean(smooth(acx_trace_ret(10:50)));
-        acy_ofsset_contact=mean(smooth(acy_trace_ret(10:50)));
-        dc_ofsset_contact=mean(smooth(dc_trace_ret(10:50)));
+        %acx_ofsset_out=mean(smooth(acx_trace_ret(acx_trace_ret<threshold_down)));
+        %acy_ofsset_out=mean(smooth(acy_trace_ret(acx_trace_ret<threshold_down)));
+        %dc_ofsset_out=mean(smooth(dc_trace_ret(acx_trace_ret<threshold_down)));
         
 
         acx_ofsset_out=mean(acx_trace_ret(end-150:end-50));

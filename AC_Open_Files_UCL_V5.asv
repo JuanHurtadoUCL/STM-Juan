@@ -35,10 +35,10 @@ remove_top=0;
 remove_botom=0;
 remove_modulation=0;
 div_cut=100;
-sgolay_filter = 3;
-Rs_calculated = 1.1683e6;
+sgolay_filter = 20;
+Rs_calculated = 1.004e6;
 Gain_Resistor=1e8;                             % Gain resistance
-cse=1.1e-10;
+cse=4.3e-11;
 freq=3.123e3;
 Pt_resistor_tip = 1090; % PT resistance Ohm
 Pt_resistor_substrate = 1090; % PT resistance Ohm
@@ -286,8 +286,8 @@ disp('f')
                 traces_acx_rms = traces_bit_acx(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
                 traces_acy_rms = traces_bit_acy(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
 
-                traces_acy = traces_acy_rms(2:end-1)/sqrt(2);              % Rms values to peak to peak change
-                traces_acx = traces_acx_rms(2:end-1)/sqrt(2);              % Rms values to peak to peak change
+                traces_acy = traces_acy_rms(2:end-1);              % Rms values to peak to peak change
+                traces_acx = traces_acx_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
                 piezo_volt = piezo_raw./20;                                % Voltage divisor at the Adwin output 1/50
                 piezo = piezo_volt*2.4e-7;                                 % Volts to m conversion 2.4e-8 [m/V]
 
@@ -299,9 +299,9 @@ disp('f')
      
 
                 figure
-                plot(piezo_volt,G_dc,'k');
+                plot(Z,G_dc,'k');
                 hold on
-                plot(piezo_volt,G_ac,'r','linewidth',1);
+                plot(Z,G_ac,'r','linewidth',1);
                 legend('DC','AC')
                 xlabel('Displacement (nm)')
                 ylabel('log (G/G_0)')
@@ -338,8 +338,8 @@ disp('f')
 
                     traces_acy = traces_acy_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
                     traces_acx = traces_acx_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
-                    piezo_volt = piezo_raw./3.33;                                % Voltage divisor at the Adwin output 1/50 
-                    piezo = piezo_volt*3.5e-5;                                 % Volts to m conversion 2.4e-8 [m/V] 
+                    piezo_volt = piezo_raw./50;                                % Voltage divisor at the Adwin output 1/50 
+                    piezo = piezo_volt*2.4e-7;                                 % Volts to m conversion 2.4e-8 [m/V] 
 
                     if size(traces_acx)<310 
                         continue
@@ -634,14 +634,14 @@ disp('f')
         traces_dc = traces_dc;
         dc_filtered = medfilt1(traces_dc,sgolay_filter);
         lca=length(dc_filtered);
-        cuta=round(lca/20);
+        cuta=round(lca/29);
         vdc_zer1=mean(dc_filtered(end-cuta:end));
         vdc_zer=(dc_filtered-vdc_zer1);
         vdc_sat=mean(vdc_zer(cuta:2*cuta));
         vdc_norm=vdc_zer./vdc_sat;
         g_dc=(vdc_norm./rserie_fun)./(1.001-vdc_norm);
         G_dc=log10(abs(real(g_dc))./G0);
-        %Z=(-piezo_v*1e-6)*1e9;
+        Z=(-piezo_v*1e-6)*1e9;
 
     end
     function Temp = temperature_resistor(T_res)
