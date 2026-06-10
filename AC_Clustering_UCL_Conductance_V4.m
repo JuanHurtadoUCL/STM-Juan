@@ -532,49 +532,87 @@ buton_fitpeak = uicontrol('style','pushbutton','parent',hp_save,...
     'callback',@g0length);
     function g0length(~,~)
         cut_g0 = [log10(0.2) log10(1.1)];
-        cut_z = -0.1;
+        cut_z = -3;
         plateau_g0=[];
         lengths=[];
         %fg0=figure;
         % 10^0.15 = 1.4125   % 10^0.25 Cambio Juan
              % 10^-0.15 = 0.7079  10^-0.25 Cambio Juan it is different than previously defined (3e-1) but makes effectively no difference
-        
+        zz_g0=[];
+        gg_g0=[];
         for k3 = 1:length(curva)
             zz=curva(k3).z;
             gg=(curva(k3).g);
-            zz_dis1=zz(gg>0.5 & gg<1.5);
-            gg_dis1=gg(gg>0.5 & gg<1.5);
-            zz_dis=zz_dis1(zz_dis1>-1 & zz_dis1<1);
-            gg_dis=gg_dis1(zz_dis1>-1 & zz_dis1<1);
-            lengths = [lengths; length(gg_dis)];
-            xstart = find((gg_dis)>0.5,1,'last');
-            xend = find((gg_dis)<-0.5,1,'first');
-            
-            if length(gg_dis)>15
-                dz = (zz_dis(end)-zz_dis(1));
-                plateau_g0 =[plateau_g0; dz];
-            end
+            zz_dis1=zz(gg>0.5 & gg<3);
+            gg_dis1=gg(gg>0.5 & gg<3);
+            zz_g0=[zz_g0; zz_dis1];
+            gg_g0=[ gg_g0; gg_dis1];
+
         end
         fg0=figure;
-        plateau_g0f = plateau_g0(plateau_g0<0.15);
+        %plateau_g0f = plateau_g0(plateau_g0<0.15);
+       [Ng0,edgeg0]= histcounts(gg_g0,100);
+       xxg0=(edgeg0(1:end-1)+edgeg0(2:end))/2;
+       Nfit=Ng0(xxg0>0.8 & xxg0<1.1);
+       xxfit=xxg0(xxg0>0.8 & xxg0<1.1);
+       f = fit(xxfit.',Nfit.','gauss1');
+       plot(xxg0,Ng0)
+       hold on
+       plot(f)
+       plot(f.b1,f.a1,'r+')
+       plot(f.b1+f.c1,f.a1/2,'b+')
+       plot(f.b1-f.c1,f.a1/2,'b+')
+
+       g_low=f.b1-f.c1;
+       g_high=f.b1+f.c1;
+       f3=figure('units','normalized','position',[0.2312 0.2630 0.6672 0.5185]);
+       ax_g0 = axes(f3,'units','normalized','position',[0.0813 0.1339 0.4000 0.8000]);
+       ax_g0_length = axes(f3,'units','normalized','position',[0.55 0.1339 0.4000 0.8000]);
+       
+G0_plateau = [];
+        for k3 = 1:length(curva)
+            zz=curva(k3).z;
+            gg=(curva(k3).g);
+            zz_g0_cut = zz(gg>g_low & gg<g_high);
+            gg_g0_cut = gg(gg>g_low & gg<g_high);
+
+          
+           if isempty(zz_g0_cut)
+                continue
+
+            end
+            if zz_g0_cut(1)<-1
+                continue
+            end
+          
+            length_g0=zz_g0_cut(end)-zz_g0_cut(1);
+            cond_g0=gg_g0_cut(end);
+
+             if length_g0<0.02
+                continue
+            end
+          
+
+            G0_plateau=[G0_plateau; length_g0];
+
+             plot(ax_g0,zz_g0_cut,gg_g0_cut)
+            hold (ax_g0,'on')
+
+
+            plot(ax_g0_length,length_g0,cond_g0,'+')
+            hold(ax_g0_length,'on')
+           
+
+        end
+        [Ng0_fin,edgeg0_fin]= histcounts(G0_plateau,60);
+       xxg0=(edgeg0_fin(1:end-1)+edgeg0_fin(2:end))/2;
+       figure
+       plot(xxg0,Ng0_fin)
+       med_plateauG0=median(G0_plateau);
+       disp('f')
         
         
-        [N,edges] = histcounts(plateau_g0,60);%, 'Normalization', 'pdf');
-        xx5=(edges(1:end-1)+edges(2:end))/2;
-        f = fit(xx5.',N.','gauss1')
-        plot(xx5,N,'linewidth',line_width);
-        hold on
-        plot(f)
-        mpg0 = f.b1;
-        fac_g0 = 0.25/mpg0;
-        xlabel('Length G_0 plateau')
-        ylabel('Counts')
-        disp(['Factor = ' num2str(fac_g0)]);
-        disp(['Length = ' num2str(mpg0) ' nm']);
-
-        G0_lengt_str = ['G0 = ' num2str(round(mpg0,2)) ' nm / Factor (' num2str(round(fac_g0,2)) ')']
-        tx_g0.String = G0_lengt_str;
-
+       
         %tx_g0 = uicontrol('style','Text','parent',hp_information,...
         %    'units','normalized','position',[0.05,0.71,.9,.2],'String',[G0_lengt_str]);
 
