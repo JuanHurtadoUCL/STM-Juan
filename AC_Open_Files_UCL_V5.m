@@ -19,7 +19,7 @@ else
 end
 cd(selpath)
 
-Vb=0.010;                             % Vbias (As appears in the lockin box)
+Vb=0.030;                             % Vbias (As appears in the lockin box)
 G0=7.748e-5;
 
 %num_trace=[9053 21158];            % Number of the traces. First one and Last One
@@ -338,8 +338,8 @@ disp('f')
 
                     traces_acy = traces_acy_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
                     traces_acx = traces_acx_rms(2:end-1)*sqrt(2);              % Rms values to peak to peak change
-                    piezo_volt = piezo_raw./3.33;                                % Voltage divisor at the Adwin output 1/50 
-                    piezo = piezo_volt*3.5e-5;                                 % Volts to m conversion 2.4e-8 [m/V] 
+                    piezo_volt = piezo_raw./10;                                % Voltage divisor at the Adwin output 1/50 
+                    piezo = piezo_volt*35;                                 % Volts to m conversion 2.4e-8 [m/V] 
 
                     if size(traces_acx)<310 
                         continue
