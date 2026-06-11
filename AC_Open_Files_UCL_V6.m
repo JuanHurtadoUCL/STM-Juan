@@ -57,6 +57,7 @@ pathfile_offset_contact = 'No measurement path file';
 pathfile_offset_out = 'No measurement path file';
 save_file_name = 'No name';
 retraction= 1;
+cut_div_val = 20;
 %save_filename = [date 'order' num2str(sgolay_filter) 'OPE3_Lockin_15V_25mV.mat'];
 
 
@@ -190,18 +191,22 @@ but_do_analysis = uicontrol('Parent',pan_measurement,'style','ToggleButton','uni
                     if size(traces_acx)<310
                         continue
                     end
+                    if rb3_offsets.Value==1
+                        g_ac = Conductance_AC_each_offset(traces_acx,traces_acy,cse,Rs_calculated,freq,sgolay_filter,cut_div_val);
+                        vth_total = thermovoltage_calculator_each_offset(g_ac,traces_dc,Rs_calculated,Gain_Resistor,Temp_tip,Temp_substrate,sgolay_filter,cut_div_val);
 
-                    g_ac = Conductance_AC(traces_acx,traces_acy,offsets_struct,freq,Rs_calculated,cse,sgolay_filter);  % nm, G/G0
+                    else
+                        g_ac = Conductance_AC(traces_acx,traces_acy,offsets_struct,freq,Rs_calculated,cse,sgolay_filter);  % nm, G/G0
+                        vth_total = thermovoltage_calculator(g_ac,traces_dc,offsets_struct,Rs_calculated,...
+                            Gain_Resistor,Temp_tip,Temp_substrate,sgolay_filter);
+                        piezo_moved=-move_zero(g_ac,piezo);
+                        DT=Temp_tip-Temp_substrate;
 
-                    vth_total = thermovoltage_calculator(g_ac,traces_dc,offsets_struct,Rs_calculated,...
-                    Gain_Resistor,Temp_tip,Temp_substrate,sgolay_filter);
-                    piezo_moved=-move_zero(g_ac,piezo);
-                    DT=Temp_tip-Temp_substrate;
 
-                   
-                    log_g=log10(abs(real(g_ac))./G0);
-                    top_g=mean(log_g(20:120));
-                    botom_g=mean(log_g(end-120:end-20));
+                        log_g=log10(abs(real(g_ac))./G0);
+                        top_g=mean(log_g(20:120));
+                        botom_g=mean(log_g(end-120:end-20));
+                    end
 
                     if top_g<-0.5
                         remove=remove+1;
@@ -282,19 +287,46 @@ edit_trace_num_off = uicontrol('Parent',pan_offsets,'style','edit','units','Norm
     function fun_edit_trace_num_off(~,~)
         cal_trace = str2num(edit_trace_num_off.String);
         edit_trace_num_off.Value = cal_trace;
-switch meas_type
-    case 1 % Lockin
+        switch meas_type
+            case 1 % Lockin
 
-       offsets_struct=cut_offsets_individual_lockin(Data_lockin_together,cal_trace);
-    case 2
-       offsets_struct=cut_offsets_individual_python(pathfile_meas,cal_trace);
+                offsets_struct=cut_offsets_individual_lockin(Data_lockin_together,cal_trace);
+            case 2
+                offsets_struct=cut_offsets_individual_python(pathfile_meas,cal_trace);
 
-end
+        end
+
+    end
+
+txt_offset_each_trace = uicontrol('Parent',pan_offsets,'style','text','units','Normalized','Position',[0.73 0.4000 0.1 0.1734],...
+    'String','Division','HorizontalAlignment','left','Visible','off','FontSize',11);
+txt_offset_each_trace_trace = uicontrol('Parent',pan_offsets,'style','text','units','Normalized','Position',[0.55 0.4000 0.1 0.1734],...
+    'String','Trace','HorizontalAlignment','left','Visible','off','FontSize',11);
+edit_each_trace_num_off = uicontrol('Parent',pan_offsets,'style','edit','units','Normalized','Position',[0.7 0.2154 0.1669 0.1734],...
+    'String',num2str(cut_div_val),'value',cut_div_val,'Visible','off','Callback',@fun_edit_each_trace_num_off);
+edit_trace_num_off_each = uicontrol('Parent',pan_offsets,'style','edit','units','Normalized','Position',[0.5 0.2154 0.1669 0.1734],...
+    'String',num2str(cal_trace),'value',cal_trace,'Visible','off','Callback',@fun_edit_trace_num_off_each);
+    function fun_edit_trace_num_off_each(~,~)
+        cal_trace = str2num(edit_trace_num_off_each.String);
+        edit_trace_num_off_each.Value = cal_trace;
+    end
+
+    function fun_edit_each_trace_num_off(~,~)
+        cut_div_val = str2num(edit_each_trace_num_off.String);
+        edit_each_trace_num_off.Value = cut_div_val;
+        switch meas_type
+            case 1 % Lockin
+                disp('This feature is still not avialable for Lockin')
+            case 2
+                
+                plot_trace_cut_div(pathfile_meas,cal_trace,cut_div_val)
+
+        end
 
     end
 
 radio_group_offsets = uibuttongroup('Parent',pan_offsets,'units','Normalized','Position',[0.0080 0.6542 0.9835 0.2965]);
-rb1_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','units','normalized','Position',[0.1 0.3022 0.33 0.43],...
+rb1_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','units','normalized','Position',[0.0182 0.3022 0.1935 0.4300],...
     'String','Offset Files','FontSize',10,'Callback',@fun_radio_offset_files);
     function fun_radio_offset_files(~,~)
         txt_pathfile_offset_contact.Visible='on';
@@ -306,7 +338,7 @@ rb1_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','unit
         edit_trace_num_off.Visible = 'off';
     end
 
-rb2_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','units','normalized','Position',[0.55 0.3022 0.33 0.43],...
+rb2_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','units','normalized','Position',[0.2645 0.3022 0.3240 0.4300],...
     'String','Offset Specific Trace','FontSize',10,'Callback',@fun_radio_offset_ind_trace);
     function fun_radio_offset_ind_trace(~,~)
         txt_pathfile_offset_contact.Visible='off';
@@ -316,6 +348,22 @@ rb2_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','unit
 
         txt_offset_ind_trace.Visible = 'on';
         edit_trace_num_off.Visible = 'on';
+    end
+
+rb3_offsets = uicontrol('Parent',radio_group_offsets,'style','radiobutton','units','normalized','Position',[0.6 0.3022 0.3240 0.4300],...
+    'String','Offset Each Trace','FontSize',10,'Callback',@fun_radio_offset_each_trace);
+    function fun_radio_offset_each_trace(~,~)
+        txt_pathfile_offset_contact.Visible='off';
+        but_pathfile_offset_contact.Visible='off';
+        txt_pathfile_offset_out.Visible='off';
+        but_pathfile_offset_out.Visible='off';
+
+        txt_offset_ind_trace.Visible = 'off';
+        edit_trace_num_off.Visible = 'off';
+        txt_offset_each_trace.Visible = 'on';
+        edit_each_trace_num_off.Visible = 'on';
+        edit_trace_num_off_each.Visible = 'on';
+        txt_offset_each_trace_trace.Visible = 'on';
     end
 % Panel Variables
 
@@ -616,17 +664,32 @@ disp('f')
         Data_struct.ACY_total = ACY;
 
     end
-    
+    function Vth = thermovoltage_calculator_each_offset(GAC_total,data_dc,rserie,Rg,T_tip,T_subs,sgolay_filter_fun,cut_div)
+        G0=7.75e-5;
+        DT = T_tip-T_subs;
+        lG_f = smoothdata(GAC_total,'sgolay',sgolay_filter_fun*2);
+        G = lG_f;
+        Rj = 1./(abs(G));
+        dc = data_dc;
+        dc_lowpass = smoothdata(dc,'sgolay',sgolay_filter_fun*4);
+        c_dc=round(length(dcdc_lowpass)/cut_div);
+        vv_zer=mean(dc_lowpass(end-2*c_dc:end-c_dc));
+
+        vv_1=dc_lowpass-vv_zer;  % Volts
+        Ith=vv_1./Rg;            % Amplifier Resistor  Amps
+        Isat=mean(Ith(c_dc:2*c_dc));  %
+        Vof=Isat*rserie;
+        Vth = Ith.*(rserie+Rj)-Vof;  % Volts
+    end
 
     function Vth = thermovoltage_calculator(GAC_total,data_dc,offsets,rserie,Rg,T_tip,T_subs,sgolay_filter)
 
         G0=7.75e-5;
         DT = T_tip-T_subs;
         lG_f = smoothdata(GAC_total,'sgolay',sgolay_filter*2);
-        %lG_f = GAC_total;
         G = lG_f;
         Rj = 1./(abs(G));
-        dc = data_dc;             % IN THE LOCKIN WE ARE DIVIDING BY 5
+        dc = data_dc;          
 
         dc_lowpass = smoothdata(dc,'sgolay',sgolay_filter*4);
         vv_zer= offsets.DC_out;
@@ -703,7 +766,26 @@ disp('f')
     end
 
     
+    function g_ac = Conductance_AC_each_offset(ac_x,ac_y,cse_fun,rserie_fun,freq,sgolay_fun,cut_div)
+        G0=7.748e-5;
+        smooth_acx = medfilt1(ac_x,sgolay_fun);
+        smooth_acy = medfilt1(ac_y,sgolay_fun);
+        va=complex(smooth_acx,smooth_acy);
+        lca=length(va);
+        cuta=round(lca/cut_div);
 
+        vac_zer1=mean(smooth(va(end-cuta:end)));
+        vac_zer=(va-vac_zer1);
+        vac_sat=mean(smooth(vac_zer(cuta:2*cuta)));
+        vac_norm=vac_zer./vac_sat;
+
+
+        para= @(x,y) (x.*y)./(x+y);
+        freq1=(-1j)/(2*pi*freq*cse_fun);
+        zs1=para(rserie_fun,freq1);
+        g_ac=real((vac_norm./zs1)./(1.001-vac_norm));
+
+    end
     function g_ac = Conductance_AC(varargin)
 
         G0=7.748e-5;
@@ -742,17 +824,69 @@ disp('f')
 
         vac_sat = complex(offsets.ACX_cont,offsets.ACY_cont)-offset_complex;
         vac_norm=vac_zer./vac_sat;
-       
+
 
         para= @(x,y) (x.*y)./(x+y);
         freq1=(-1j)/(2*pi*freq*cse_fun);
         zs1=para(rserie_fun,freq1);
         g_ac=real((vac_norm./zs1)./(1.001-vac_norm));
 
-end
+    end
 
     function Resistor = resistor_temperature(Tem)
         Resistor = (-(-Tem*0.00116 +3.908)^2+17.59246)/0.00232;
+    end
+
+    function  plot_trace_cut_div(pathfile_meas,cal_trace,cut_div)
+
+        folder_trace_dc = ({dir(fullfile(pathfile_meas,'Dc*.csv')).name}) ;
+        folder_trace_acx = ({dir(fullfile(pathfile_meas,'AcX*.csv')).name}) ;
+        folder_trace_acy = ({dir(fullfile(pathfile_meas,'AcY*.csv')).name}) ;
+        file_trace_dc= folder_trace_dc{cal_trace};
+        file_trace_acx= folder_trace_acx{cal_trace};
+        file_trace_acy= folder_trace_acy{cal_trace};
+
+
+        traces_bit_dc = csvread([pathfile_meas,'\',file_trace_dc]);
+        traces_bit_acx = csvread([pathfile_meas,'\',file_trace_acx]);
+        traces_bit_acy = csvread([pathfile_meas,'\',file_trace_acy]);
+
+        dc_trace_ret = traces_bit_dc(1:end).*(10/8388608)-10;       % Bit to volt function of 24 bits Adwin
+        acx_trace_ret = traces_bit_acx(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+        acy_trace_ret = traces_bit_acy(1:end).*(10/8388608)-10;   % Bit to volt function of 24 bits Adwin
+
+        lca=length(dc_trace_ret);
+        cuta=round(lca/cut_div);
+
+        acx_zero=acx_trace_ret(end-cuta:end);
+        acy_zero=acy_trace_ret(end-cuta:end);
+        acx_sat=acx_trace_ret(cuta:2*cuta);
+        acy_sat=acy_trace_ret(cuta:2*cuta);
+        dc_zero=dc_trace_ret(end-cuta:end);
+        dc_sat=dc_trace_ret(cuta:2*cuta);
+
+        x_index = linspace(1,length(acx_trace_ret),length(acx_trace_ret));
+
+        figure
+        subplot(1,3,1);
+        plot(x_index,acx_trace_ret,'b')
+        hold on
+        plot(x_index(end-cuta:end),acx_zero,'r')
+        plot(x_index(cuta:2*cuta),acx_sat,'r')
+        xlabel('AC X')
+        subplot(1,3,2);
+        plot(x_index,acy_trace_ret,'b')
+        hold on
+        plot(x_index(end-cuta:end),acy_zero,'r')
+        plot(x_index(cuta:2*cuta),acy_sat,'r')
+        xlabel('AC Y')
+        subplot(1,3,3);
+        plot(x_index,dc_trace_ret,'b')
+        hold on
+        plot(x_index(end-cuta:end),dc_zero,'r')
+        plot(x_index(cuta:2*cuta),dc_sat,'r')
+        xlabel('DC')
+
     end
 
     function Offsets_struc = cut_offsets_individual_python(pathfile_meas,cal_trace)
@@ -784,10 +918,7 @@ end
         acy_ofsset_contact=mean(smooth(acy_trace_ret(acx_trace_ret>threshold_up)));
         dc_ofsset_contact=mean(smooth(dc_trace_ret(acx_trace_ret>threshold_up)));
 
-        %acx_ofsset_out=mean(smooth(acx_trace_ret(acx_trace_ret<threshold_down)));
-        %acy_ofsset_out=mean(smooth(acy_trace_ret(acx_trace_ret<threshold_down)));
-        %dc_ofsset_out=mean(smooth(dc_trace_ret(acx_trace_ret<threshold_down)));
-        
+
 
         acx_ofsset_out=mean(acx_trace_ret(end-50:end));
         acy_ofsset_out=mean(acy_trace_ret(end-50:end));
